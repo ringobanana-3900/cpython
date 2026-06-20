@@ -551,6 +551,66 @@ _random_Random_getrandbits_impl(RandomObject *self, uint64_t k)
 
 /*[clinic input]
 @critical_section
+_random.Random.randbytes
+
+  self: self(type="RandomObject *")
+  n: uint64
+  /
+
+randbytes(n) -> x.  Generate n random bytes.
+[clinic start generated code]*/
+
+static PyObject *
+_random_Random_randbytes_impl(RandomObject *self, uint64_t n)
+/*[clinic end generated code: output=f4c2a7ebdadaad00 input=feb7be0b1bfff2cf]*/
+{
+    Py_ssize_t i, words, k;
+    uint32_t r;
+    uint32_t *wordarray;
+    PyObject *result;
+
+    if (n == 0)
+        return PyBytes_FromStringAndSize(NULL, 0);
+
+    // if (k <= 32)  /* Fast path */
+    //     return PyLong_FromUnsignedLong(genrand_uint32(self) >> (32 - k));
+
+    if ((n - 1u) / 32u + 1u > PY_SSIZE_T_MAX / 4u) {
+        PyErr_NoMemory();
+        return NULL;
+    }
+
+    words = (Py_ssize_t)((n - 1u) / 4u + 1u);
+    k = (Py_ssize_t)n;
+
+    result = PyBytes_FromStringAndSize(NULL, words * 4);
+    if (result == NULL) {
+        return NULL;
+    }
+
+    wordarray = (uint32_t *)PyBytes_AS_STRING(result);
+
+    /* Fill-out bits by 32-bit words */
+#if PY_LITTLE_ENDIAN
+    for (i = 0; i < words; i++, k-=4)
+#else
+    for (i = words; i >= 0; i--, k-=4)
+#endif
+    {
+        r = genrand_uint32(self);
+        if (k < 4)
+            r >>= (32 - k*8);  /* Drop least significant bits */
+        wordarray[i] = r;
+    }
+
+    if (_PyBytes_Resize(&result, n)) {
+        return NULL;
+    }
+    return result;
+}
+
+/*[clinic input]
+@critical_section
 @text_signature "($self, [seed])"
 _random.Random.__init__ as random_init
 
@@ -572,6 +632,7 @@ static PyMethodDef random_methods[] = {
     _RANDOM_RANDOM_GETSTATE_METHODDEF
     _RANDOM_RANDOM_SETSTATE_METHODDEF
     _RANDOM_RANDOM_GETRANDBITS_METHODDEF
+    _RANDOM_RANDOM_RANDBYTES_METHODDEF
     {NULL,              NULL}           /* sentinel */
 };
 
